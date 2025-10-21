@@ -317,5 +317,3 @@ echo
 print_info "日志查看命令:"
 echo "  - journalctl -u shadowsocks-libev-server -f"
 echo "  - journalctl -u shadowsocks-rust-server -f"
-echo
-print_warn "请确保防火墙已开放端口 $LIB_PORT 和 $RUST_PORT"
