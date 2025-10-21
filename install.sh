@@ -1,262 +1,321 @@
 #!/bin/bash
-# sing-box Debian/Ubuntu Linux 安装脚本
-# 使用方法: SB_VERSION=1.11.4 AL_PORTS="8443-8445" RE_PORT=443 AL_DOMAIN=example.com RE_SNI=www.example.com API_TOKEN=your_token bash install.sh
+
+# Shadowsocks (libev & rust) 和 simple-obfs 安装脚本
+# 适用于 Debian 11/12/13 和 Ubuntu 20.04/22.04/24.04
+# 使用方法: sudo bash install_shadowsocks.sh
 
 set -e
 
-# 颜色定义
-GREEN='\033[0;32m'
+# 颜色输出
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m'
+BLUE='\033[0;34m'
+NC='\033[0m' # 无颜色
 
+# 打印函数
 print_info() {
     echo -e "${GREEN}[信息]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${YELLOW}[警告]${NC} $1"
 }
 
 print_error() {
     echo -e "${RED}[错误]${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[警告]${NC} $1"
+print_success() {
+    echo -e "${GREEN}[成功]${NC} $1"
 }
 
-# 检查 root 权限
+print_step() {
+    echo -e "${BLUE}[步骤]${NC} $1"
+}
+
+# 检查是否以 root 身份运行
 if [ "$(id -u)" -ne 0 ]; then
-    print_error "此脚本需要 root 权限运行"
+    print_error "此脚本必须以 root 身份运行"
     exit 1
 fi
 
-# 配置变量（支持环境变量和位置参数，优先使用环境变量）
-SB_VERSION=${SB_VERSION:-${1:-1.11.15}}
-AL_PORTS=${AL_PORTS:-"65031,65032,65033"}
-RE_PORT=${RE_PORT:-443}
-AL_DOMAIN=${AL_DOMAIN:-us.yyds.nyc.mn}
-RE_SNI=${RE_SNI:-www.cityofrc.us}
-API_TOKEN=${API_TOKEN:-K8Xo_z-Sayq0iyQ7icdio0t5lFSRoCFrgdYr7HFY}
+# 检测操作系统
+if [ ! -f /etc/os-release ]; then
+    print_error "无法检测操作系统"
+    exit 1
+fi
 
-# 显示配置信息
-print_info "=========================================="
-print_info "sing-box 安装脚本"
-print_info "=========================================="
-print_info "sing-box 版本: $SB_VERSION"
-print_info "AL 端口配置: $AL_PORTS"
-print_info "Reality 端口: $RE_PORT"
-print_info "AL 域名: $AL_DOMAIN"
-print_info "Reality SNI: $RE_SNI"
-print_info "=========================================="
+. /etc/os-release
+OS_ID=$ID
+OS_VERSION_CODENAME=$(lsb_release -sc 2>/dev/null || echo "$VERSION_CODENAME")
 
-# 解析端口（支持范围表示法）
-if [[ "$AL_PORTS" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-    # 范围表示法: 8443-8445
-    START_PORT=${BASH_REMATCH[1]}
-    END_PORT=${BASH_REMATCH[2]}
-    PORT_COUNT=$((END_PORT - START_PORT + 1))
-    
-    if [ $PORT_COUNT -ne 3 ]; then
-        print_error "端口范围必须包含3个端口，当前为 $PORT_COUNT 个"
+print_info "检测到的操作系统: $OS_ID $VERSION"
+print_info "版本代号: $OS_VERSION_CODENAME"
+
+# 验证系统是否支持
+case "$OS_ID" in
+    debian)
+        case "$OS_VERSION_CODENAME" in
+            buster|bullseye|bookworm|trixie)
+                print_success "支持的 Debian 版本"
+                ;;
+            *)
+                print_error "不支持的 Debian 版本: $OS_VERSION_CODENAME"
+                print_info "支持的版本: buster(10), bullseye(11), bookworm(12), trixie(13)"
+                exit 1
+                ;;
+        esac
+        ;;
+    ubuntu)
+        case "$OS_VERSION_CODENAME" in
+            focal|jammy|noble)
+                print_success "支持的 Ubuntu 版本"
+                ;;
+            *)
+                print_error "不支持的 Ubuntu 版本: $OS_VERSION_CODENAME"
+                print_info "支持的版本: focal(20.04), jammy(22.04), noble(24.04)"
+                exit 1
+                ;;
+        esac
+        ;;
+    *)
+        print_error "不支持的操作系统: $OS_ID"
+        print_info "此脚本仅支持 Debian 和 Ubuntu"
         exit 1
-    fi
-    
-    SS_PORT=$START_PORT
-    TR_PORT=$((START_PORT + 1))
-    WS_PORT=$((START_PORT + 2))
-    
-    print_info "端口分配: SS=$SS_PORT, Trojan=$TR_PORT, VLESS-WS=$WS_PORT"
-else
-    # 逗号分隔表示法: 8443,9443,10443
-    IFS=',' read -ra PORT_ARRAY <<< "$AL_PORTS"
-    SS_PORT=${PORT_ARRAY[0]:-65031}
-    TR_PORT=${PORT_ARRAY[1]:-65032}
-    WS_PORT=${PORT_ARRAY[2]:-65033}
-    
-    print_info "端口分配: SS=$SS_PORT, Trojan=$TR_PORT, VLESS-WS=$WS_PORT"
+        ;;
+esac
+
+# 配置参数（仅端口可自定义）
+LIB_PORT=${LIB_PORT:-65041}
+RUST_PORT=${RUST_PORT:-65042}
+
+print_info "配置参数:"
+echo "  - Shadowsocks-libev 端口: $LIB_PORT"
+echo "  - Shadowsocks-rust 端口: $RUST_PORT"
+echo "  - 密码: opj33QlG2TRNOB18xt288A=="
+echo "  - Libev 加密方法: aes-256-gcm"
+echo "  - Rust 加密方法: aes-128-gcm"
+echo "  - 混淆类型: http"
+echo
+
+printf "是否继续安装? (y/N): "
+read -r REPLY
+if ! echo "$REPLY" | grep -qE '^[Yy]$'; then
+    print_info "已取消安装"
+    exit 0
 fi
 
-# 安装 sing-box
-print_info "正在安装 sing-box $SB_VERSION ..."
-if curl -fsSL https://sing-box.app/install.sh | bash -s -- --version "$SB_VERSION" > /dev/null 2>&1; then
-    print_info "sing-box $SB_VERSION 安装成功"
+echo
+
+# 步骤 1: 更新系统并安装依赖
+print_step "步骤 1/9: 更新系统并安装必要依赖"
+apt-get update
+apt-get install -y lsb-release ca-certificates curl gnupg
+print_success "依赖安装完成"
+
+echo
+
+# 步骤 2: 添加 GPG 公钥
+print_step "步骤 2/9: 添加 Teddysun Shadowsocks Repository 公钥"
+curl -fsSL https://dl.lamp.sh/shadowsocks/DEB-GPG-KEY-Teddysun | gpg --dearmor --yes -o /usr/share/keyrings/deb-gpg-key-teddysun.gpg
+chmod a+r /usr/share/keyrings/deb-gpg-key-teddysun.gpg
+print_success "GPG 公钥添加完成"
+
+echo
+
+# 步骤 3: 添加软件源
+print_step "步骤 3/9: 添加 Teddysun Shadowsocks Repository"
+if [ "$OS_ID" = "debian" ]; then
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/deb-gpg-key-teddysun.gpg] https://dl.lamp.sh/shadowsocks/debian/ $OS_VERSION_CODENAME main" > /etc/apt/sources.list.d/teddysun.list
+elif [ "$OS_ID" = "ubuntu" ]; then
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/deb-gpg-key-teddysun.gpg] https://dl.lamp.sh/shadowsocks/ubuntu/ $OS_VERSION_CODENAME main" > /etc/apt/sources.list.d/teddysun.list
+fi
+print_success "软件源添加完成"
+
+echo
+
+# 步骤 4: 更新软件包缓存
+print_step "步骤 4/9: 更新软件包缓存"
+apt-get update
+print_success "缓存更新完成"
+
+echo
+
+# 步骤 5: 安装 shadowsocks-libev
+print_step "步骤 5/9: 安装 shadowsocks-libev"
+
+# 根据系统版本选择合适的包版本
+case "$OS_ID-$OS_VERSION_CODENAME" in
+    debian-buster)
+        SS_LIBEV_VERSION="3.3.5-12~debian.10~buster"
+        ;;
+    debian-bullseye)
+        SS_LIBEV_VERSION="3.3.5-12~debian.11~bullseye"
+        ;;
+    debian-bookworm)
+        SS_LIBEV_VERSION="3.3.5-12~debian.12~bookworm"
+        ;;
+    debian-trixie)
+        SS_LIBEV_VERSION="3.3.5-12~debian.13~trixie"
+        ;;
+    ubuntu-focal)
+        SS_LIBEV_VERSION="3.3.5-12~ubuntu.20.04~focal"
+        ;;
+    ubuntu-jammy)
+        SS_LIBEV_VERSION="3.3.5-12~ubuntu.22.04~jammy"
+        ;;
+    ubuntu-noble)
+        SS_LIBEV_VERSION="3.3.5-12~ubuntu.24.04~noble"
+        ;;
+    *)
+        print_warn "未知的系统版本，尝试安装最新版本"
+        apt-get install -y shadowsocks-libev
+        SS_LIBEV_VERSION="installed"
+        ;;
+esac
+
+if [ "$SS_LIBEV_VERSION" != "installed" ]; then
+    apt-get install -y shadowsocks-libev=$SS_LIBEV_VERSION
+fi
+
+# 验证安装
+if command -v ss-server >/dev/null 2>&1; then
+    print_success "shadowsocks-libev 安装完成"
+    ss-server -h | head -n 1
 else
-    print_error "sing-box 安装失败"
+    print_error "shadowsocks-libev 安装失败"
     exit 1
 fi
 
-# 创建目录
-CONFIG_DIR="/etc/sing-box"
-WORK_DIR="/var/lib/sing-box"
-mkdir -p "$CONFIG_DIR" "$WORK_DIR"
+echo
 
-# 生成配置文件
-print_info "正在生成配置文件..."
-cat > "$CONFIG_DIR/config.json" << EOF
+# 步骤 6: 安装 shadowsocks-rust
+print_step "步骤 6/9: 安装 shadowsocks-rust"
+apt-get install -y shadowsocks-rust
+
+# 验证安装
+if command -v ssservice >/dev/null 2>&1; then
+    print_success "shadowsocks-rust 安装完成"
+    ssservice --version
+else
+    print_error "shadowsocks-rust 安装失败"
+    exit 1
+fi
+
+echo
+
+# 步骤 7: 安装 simple-obfs
+print_step "步骤 7/9: 安装 simple-obfs 插件"
+apt-get install -y shadowsocks-simple-obfs
+
+# 验证安装
+if command -v obfs-server >/dev/null 2>&1; then
+    print_success "simple-obfs 安装完成"
+    obfs-server -h | head -n 1
+else
+    print_error "simple-obfs 安装失败"
+    exit 1
+fi
+
+echo
+
+# 步骤 8: 创建配置文件
+print_step "步骤 8/9: 创建配置文件"
+
+# 确保配置目录存在
+mkdir -p /etc/shadowsocks
+
+# 创建 shadowsocks-libev 配置文件
+print_info "创建 shadowsocks-libev 配置文件..."
+cat > /etc/shadowsocks/shadowsocks-libev-config.json <<EOF
 {
-  "log": {
-    "disabled": false,
-    "level": "info",
-    "timestamp": true
-  },
-  "inbounds": [
-    {
-      "type": "shadowsocks",
-      "tag": "ss-in",
-      "listen": "::",
-      "listen_port": ${SS_PORT},
-      "method": "aes-128-gcm",
-      "password": "L3vCBgE7nSUlHQcV0D9qYA=="
-    },
-    {
-      "type": "trojan",
-      "tag": "trojan-in",
-      "listen": "::",
-      "listen_port": ${TR_PORT},
-      "users": [
-        {
-          "password": "hBh1uKxMhYr6yTc40MDIcg=="
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "${AL_DOMAIN}",
-        "alpn": [
-          "h2",
-          "http/1.1"
-        ],
-        "acme": {
-          "domain": "${AL_DOMAIN}",
-          "data_directory": "acme",
-          "email": "yyds88@gmail.com",
-          "dns01_challenge": {
-            "provider": "cloudflare",
-            "api_token": "${API_TOKEN}"
-          }
-        }
-      }
-    },
-    {
-      "type": "vless",
-      "tag": "vless-in",
-      "listen": "::",
-      "listen_port": ${WS_PORT},
-      "users": [
-        {
-          "uuid": "43a1f08a-d9ff-4aea-ac8a-cc622caf62a5"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "${AL_DOMAIN}",
-        "alpn": [
-          "h2",
-          "http/1.1"
-        ],
-        "acme": {
-          "domain": "${AL_DOMAIN}",
-          "data_directory": "acme",
-          "email": "yyds88@gmail.com",
-          "dns01_challenge": {
-            "provider": "cloudflare",
-            "api_token": "${API_TOKEN}"
-          }
-        }
-      }
-    },
-    {
-      "type": "vless",
-      "tag": "real-in",
-      "listen": "::",
-      "listen_port": ${RE_PORT},
-      "users": [
-        {
-          "uuid": "43a1f08a-d9ff-4aea-ac8a-cc622caf62a5",
-          "flow": "xtls-rprx-vision"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "${RE_SNI}",
-        "reality": {
-          "enabled": true,
-          "handshake": {
-            "server": "${RE_SNI}",
-            "server_port": 443
-          },
-          "private_key": "IJ7MvrtAgMGCJdLk4JHtaRci5uAIa2SD5aNO0hsNJ2U",
-          "short_id": [
-            "4eae9cfd38fb5a8d"
-          ]
-        }
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
-  ]
+    "server": "0.0.0.0",
+    "server_port": $LIB_PORT,
+    "password": "opj33QlG2TRNOB18xt288A==",
+    "timeout": 300,
+    "method": "aes-256-gcm",
+    "fast_open": true,
+    "nameserver": "8.8.8.8",
+    "mode": "tcp_only",
+    "plugin": "obfs-server",
+    "plugin_opts": "obfs=http"
 }
 EOF
 
-print_info "配置文件已创建: $CONFIG_DIR/config.json"
+# 创建 shadowsocks-rust 配置文件
+print_info "创建 shadowsocks-rust 配置文件..."
+cat > /etc/shadowsocks/shadowsocks-rust-config.json <<EOF
+{
+    "server": "0.0.0.0",
+    "server_port": $RUST_PORT,
+    "password": "opj33QlG2TRNOB18xt288A==",
+    "timeout": 300,
+    "method": "aes-128-gcm",
+    "fast_open": true,
+    "nameserver": "8.8.8.8",
+    "mode": "tcp_only",
+    "plugin": "obfs-server",
+    "plugin_opts": "obfs=http"
+}
+EOF
 
-# 验证配置
-print_info "正在验证配置文件..."
-if sing-box check -c "$CONFIG_DIR/config.json" > /dev/null 2>&1; then
-    print_info "配置文件验证通过"
-else
-    print_error "配置文件验证失败，请检查配置"
-    exit 1
-fi
+print_success "配置文件创建完成"
 
-# 启动服务
-print_info "正在启动 sing-box 服务..."
-systemctl daemon-reload
-systemctl enable sing-box.service --now > /dev/null 2>&1
+echo
 
-# 等待服务启动
+# 步骤 9: 启动服务
+print_step "步骤 9/9: 启动并启用服务"
+
+print_info "启动 shadowsocks-libev 服务..."
+systemctl enable shadowsocks-libev-server --now
 sleep 2
 
-# 检查服务状态
-if systemctl is-active --quiet sing-box.service; then
-    SERVICE_STATUS="运行中"
+if systemctl is-active --quiet shadowsocks-libev-server; then
+    print_success "shadowsocks-libev 服务已启动"
 else
-    SERVICE_STATUS="启动失败"
-    print_error "服务启动失败，请检查日志: journalctl -u sing-box -n 50"
-    exit 1
+    print_error "shadowsocks-libev 服务启动失败"
+    systemctl status shadowsocks-libev-server --no-pager
 fi
 
-# 输出结果
-echo ""
-print_info "=========================================="
-print_info "sing-box 安装并启动完成！"
-print_info "=========================================="
-echo ""
-print_info "版本信息:"
-print_info "  sing-box 版本: $SB_VERSION"
-echo ""
-print_info "端口配置:"
-print_info "  Shadowsocks: $SS_PORT"
-print_info "  Trojan (TLS): $TR_PORT"
-print_info "  VLESS-WS (TLS): $WS_PORT"
-print_info "  VLESS-Reality: $RE_PORT"
-echo ""
-print_info "域名配置:"
-print_info "  ACME 域名: $AL_DOMAIN"
-print_info "  Reality SNI: $RE_SNI"
-echo ""
-print_info "文件位置:"
-print_info "  配置文件: $CONFIG_DIR/config.json"
-print_info "  工作目录: $WORK_DIR"
-print_info "  证书目录: $WORK_DIR/acme (相对路径)"
-echo ""
-print_info "服务状态:"
-print_info "  当前状态: $SERVICE_STATUS"
-print_info "  开机自启: 已启用"
-echo ""
-print_info "常用命令:"
-print_info "  查看状态: systemctl status sing-box"
-print_info "  查看日志: journalctl -u sing-box -f"
-print_info "  重启服务: systemctl restart sing-box"
-print_info "=========================================="
+print_info "启动 shadowsocks-rust 服务..."
+systemctl enable shadowsocks-rust-server --now
+sleep 2
+
+if systemctl is-active --quiet shadowsocks-rust-server; then
+    print_success "shadowsocks-rust 服务已启动"
+else
+    print_error "shadowsocks-rust 服务启动失败"
+    systemctl status shadowsocks-rust-server --no-pager
+fi
+
+echo
+
+# 显示安装总结
+print_success "=========================================="
+print_success "Shadowsocks 安装完成！"
+print_success "=========================================="
+echo
+print_info "配置信息:"
+echo "  服务器地址: $(curl -s ifconfig.me || echo "获取失败")"
+echo "  Shadowsocks-libev 端口: $LIB_PORT"
+echo "  Shadowsocks-rust 端口: $RUST_PORT"
+echo "  密码: opj33QlG2TRNOB18xt288A=="
+echo "  Libev 加密方法: aes-256-gcm"
+echo "  Rust 加密方法: aes-128-gcm"
+echo "  混淆插件: obfs-server"
+echo "  混淆类型: http"
+echo
+print_info "配置文件位置:"
+echo "  - /etc/shadowsocks/shadowsocks-libev-config.json"
+echo "  - /etc/shadowsocks/shadowsocks-rust-config.json"
+echo
+print_info "服务管理命令:"
+echo "  - 查看 libev 状态: systemctl status shadowsocks-libev-server"
+echo "  - 查看 rust 状态: systemctl status shadowsocks-rust-server"
+echo
+print_info "日志查看命令:"
+echo "  - journalctl -u shadowsocks-libev-server -f"
+echo "  - journalctl -u shadowsocks-rust-server -f"
+echo
+print_warn "请确保防火墙已开放端口 $LIB_PORT 和 $RUST_PORT"
