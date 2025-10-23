@@ -27,19 +27,11 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 print_warn "=== Shadowsocks 卸载脚本 ==="
-echo "此脚本将卸载以下组件："
+echo "开始卸载以下组件："
 echo "  - shadowsocks-libev"
 echo "  - shadowsocks-rust"
 echo "  - simple-obfs"
 echo "  - 相关配置文件和服务"
-echo
-
-read -p "确认要卸载吗？此操作不可恢复！(y/N): " -r
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_info "已取消卸载"
-    exit 0
-fi
-
 echo
 
 # 步骤 1: 停止并禁用服务
@@ -139,24 +131,17 @@ echo
 # 步骤 4: 删除配置文件和目录
 print_step "步骤 4/5: 删除配置文件和目录"
 
-read -p "是否删除配置文件？(y/N): " -r
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if [ -d /etc/shadowsocks-libev ]; then
-        rm -rf /etc/shadowsocks-libev
-        print_success "已删除 /etc/shadowsocks-libev"
-    fi
-    
-    if [ -d /etc/shadowsocks-rust ]; then
-        rm -rf /etc/shadowsocks-rust
-        print_success "已删除 /etc/shadowsocks-rust"
-    fi
-    
-    print_success "配置文件已删除"
-else
-    print_info "保留配置文件"
-    echo "  - /etc/shadowsocks-libev/"
-    echo "  - /etc/shadowsocks-rust/"
+if [ -d /etc/shadowsocks-libev ]; then
+    rm -rf /etc/shadowsocks-libev
+    print_success "已删除 /etc/shadowsocks-libev"
 fi
+
+if [ -d /etc/shadowsocks-rust ]; then
+    rm -rf /etc/shadowsocks-rust
+    print_success "已删除 /etc/shadowsocks-rust"
+fi
+
+print_success "配置文件已删除"
 
 echo
 
@@ -194,6 +179,7 @@ echo "  ✓ shadowsocks-libev"
 echo "  ✓ shadowsocks-rust"
 echo "  ✓ simple-obfs"
 echo "  ✓ systemd 服务文件"
+echo "  ✓ 配置文件目录"
 echo
 
 # 检查是否还有残留
@@ -213,10 +199,6 @@ fi
 if command -v obfs-server >/dev/null 2>&1; then
     print_warn "发现残留: obfs-server 命令仍然存在"
     RESIDUAL=true
-fi
-
-if [ -d /etc/shadowsocks-libev ] || [ -d /etc/shadowsocks-rust ]; then
-    print_info "配置目录仍然存在（已选择保留）"
 fi
 
 if [ "$RESIDUAL" = false ]; then
