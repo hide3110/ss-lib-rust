@@ -1,4 +1,4 @@
-# sing-box脚本
+# Shadowsocks (libev & rust) + simple-obfs
 
 这个 Bash 脚本可以帮助你在 Debian 10/11/12/13 和 Ubuntu 20.04/22.04/24.04 系统快速部署 shadowsocks-libev/rust+obfs 代理服务器。
 
