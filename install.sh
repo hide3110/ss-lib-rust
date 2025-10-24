@@ -134,7 +134,20 @@ After=network.target
 [Service]
 Type=simple
 LimitNOFILE=32768
-ExecStart=ExecStart=/usr/bin/ssserver -c /etc/shadowsocks-rust/config.json
+[Unit]
+Description=Shadowsocks-rust Service
+Documentation=https://github.com/shadowsocks/shadowsocks-rust
+After=network.target
+
+[Service]
+Type=simple
+LimitNOFILE=32768
+ExecStart=/usr/bin/ssservice server --log-without-time -c /etc/shadowsocks-rust/config.json
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
 Restart=on-failure
 
 [Install]
