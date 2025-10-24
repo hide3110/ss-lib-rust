@@ -144,7 +144,7 @@ After=network.target
 [Service]
 Type=simple
 LimitNOFILE=32768
-ExecStart=/usr/bin/ssservice server --log-without-time -c /etc/shadowsocks-rust/config.json
+ExecStart=/usr/bin/ssservice -c /etc/shadowsocks-rust/config.json
 Restart=on-failure
 
 [Install]
