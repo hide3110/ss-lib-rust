@@ -44,7 +44,7 @@ echo
 # 步骤 1: 更新系统
 print_step "步骤 1/7: 更新系统并安装基础工具"
 apt update && apt upgrade -y
-apt install -y sudo curl wget openssl unzip
+apt install -y sudo curl wget openssl unzip xz-utils
 print_success "系统更新完成"
 echo
 
