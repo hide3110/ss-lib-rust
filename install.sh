@@ -222,8 +222,9 @@ print_step "步骤 7/7: 启动并启用服务"
 
 systemctl daemon-reload
 
-print_info "启动 shadowsocks-libev..."
-systemctl enable shadowsocks-libev --now
+print_info "重启 shadowsocks-libev 以应用配置..."
+systemctl restart shadowsocks-libev
+systemctl enable shadowsocks-libev
 sleep 2
 
 if systemctl is-active --quiet shadowsocks-libev; then
