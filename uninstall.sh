@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Shadowsocks (libev & rust) + simple-obfs 一键卸载脚本
+# Shadowsocks (libev & rust) + simple-obfs 一键卸载脚本 (最终自动化版)
 # 适用于 Debian / Ubuntu
 # 使用方法: bash uninstall.sh
 
@@ -26,38 +26,32 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-print_warn "=== Shadowsocks 卸载脚本 ==="
-echo "开始卸载以下组件："
-echo "  - shadowsocks-libev"
-echo "  - shadowsocks-rust"
-echo "  - simple-obfs"
-echo "  - 相关配置文件和服务"
-echo
+print_warn "================================================="
+print_warn "=== Shadowsocks 全自动卸载脚本 ==="
+print_warn "================================================="
+print_info "脚本将直接开始卸载..."
+sleep 2
 
 # 步骤 1: 停止并禁用服务
 print_step "步骤 1/5: 停止并禁用服务"
 
-print_info "停止 shadowsocks-libev 服务..."
+# 停止 libev
+print_info "处理 shadowsocks-libev 服务..."
 if systemctl is-active --quiet shadowsocks-libev 2>/dev/null; then
     systemctl stop shadowsocks-libev
     print_success "shadowsocks-libev 服务已停止"
-else
-    print_info "shadowsocks-libev 服务未运行"
 fi
-
 if systemctl is-enabled --quiet shadowsocks-libev 2>/dev/null; then
     systemctl disable shadowsocks-libev
     print_success "shadowsocks-libev 服务已禁用"
 fi
 
-print_info "停止 shadowsocks-rust 服务..."
+# 停止 rust
+print_info "处理 shadowsocks-rust 服务..."
 if systemctl is-active --quiet shadowsocks-rust 2>/dev/null; then
     systemctl stop shadowsocks-rust
     print_success "shadowsocks-rust 服务已停止"
-else
-    print_info "shadowsocks-rust 服务未运行"
 fi
-
 if systemctl is-enabled --quiet shadowsocks-rust 2>/dev/null; then
     systemctl disable shadowsocks-rust
     print_success "shadowsocks-rust 服务已禁用"
@@ -68,16 +62,13 @@ echo
 # 步骤 2: 删除 systemd 服务文件
 print_step "步骤 2/5: 删除 systemd 服务文件"
 
-if [ -f /etc/systemd/system/shadowsocks-rust.service ]; then
-    rm -f /etc/systemd/system/shadowsocks-rust.service
-    print_success "已删除 shadowsocks-rust.service"
+SERVICE_FILE_RUST="/usr/lib/systemd/system/shadowsocks-rust.service"
+if [ -f "$SERVICE_FILE_RUST" ]; then
+    rm -f "$SERVICE_FILE_RUST"
+    print_success "已删除手动创建的 shadowsocks-rust 服务文件"
 fi
 
-if [ -f /etc/systemd/system/shadowsocks-libev.service ]; then
-    rm -f /etc/systemd/system/shadowsocks-libev.service
-    print_success "已删除 shadowsocks-libev.service"
-fi
-
+# libev 的服务文件将由 apt purge 自动处理
 systemctl daemon-reload
 print_success "systemd 配置已重新加载"
 
@@ -86,17 +77,17 @@ echo
 # 步骤 3: 卸载软件包和删除二进制文件
 print_step "步骤 3/5: 卸载软件和删除二进制文件"
 
-# 卸载 shadowsocks-libev
-print_info "卸载 shadowsocks-libev..."
+# 卸载 shadowsocks-libev 软件包
+print_info "卸载 shadowsocks-libev 软件包..."
 if dpkg -l | grep -q shadowsocks-libev; then
-    apt remove --purge -y shadowsocks-libev
-    print_success "shadowsocks-libev 已卸载"
+    apt-get remove --purge -y shadowsocks-libev
+    print_success "shadowsocks-libev 已通过 apt purge 完全卸载"
 else
-    print_info "shadowsocks-libev 未安装（跳过）"
+    print_info "shadowsocks-libev 未通过 apt 安装（跳过）"
 fi
 
-# 删除 shadowsocks-rust 二进制文件
-print_info "删除 shadowsocks-rust 二进制文件..."
+# 删除手动安装的 shadowsocks-rust 二进制文件
+print_info "删除手动安装的 shadowsocks-rust 二进制文件..."
 RUST_BINS=(
     /usr/bin/sslocal
     /usr/bin/ssserver
@@ -104,7 +95,6 @@ RUST_BINS=(
     /usr/bin/ssurl
     /usr/bin/ssservice
 )
-
 for bin in "${RUST_BINS[@]}"; do
     if [ -f "$bin" ]; then
         rm -f "$bin"
@@ -118,7 +108,6 @@ OBFS_BINS=(
     /usr/bin/obfs-server
     /usr/bin/obfs-local
 )
-
 for bin in "${OBFS_BINS[@]}"; do
     if [ -f "$bin" ]; then
         rm -f "$bin"
@@ -133,26 +122,25 @@ print_step "步骤 4/5: 删除配置文件和目录"
 
 if [ -d /etc/shadowsocks-libev ]; then
     rm -rf /etc/shadowsocks-libev
-    print_success "已删除 /etc/shadowsocks-libev"
+    print_success "已删除 /etc/shadowsocks-libev 目录"
 fi
 
 if [ -d /etc/shadowsocks-rust ]; then
     rm -rf /etc/shadowsocks-rust
-    print_success "已删除 /etc/shadowsocks-rust"
+    print_success "已删除 /etc/shadowsocks-rust 目录"
 fi
-
-print_success "配置文件已删除"
 
 echo
 
-# 步骤 5: 清理临时文件
-print_step "步骤 5/5: 清理临时文件"
+# 步骤 5: 清理系统
+print_step "步骤 5/5: 清理系统"
 
+# 清理安装时下载的临时文件
+print_info "清理临时文件..."
 TEMP_FILES=(
     /tmp/shadowsocks-rust.tar.xz
     /tmp/simple-obfs.tar.gz
 )
-
 for file in "${TEMP_FILES[@]}"; do
     if [ -f "$file" ]; then
         rm -f "$file"
@@ -160,51 +148,35 @@ for file in "${TEMP_FILES[@]}"; do
     fi
 done
 
-# 清理 APT 缓存
-print_info "清理 APT 缓存..."
-apt autoremove -y
-apt autoclean
-print_success "APT 缓存清理完成"
+# 清理 APT 缓存和无用依赖
+print_info "清理 APT 缓存和无用依赖..."
+apt-get autoremove -y > /dev/null
+apt-get clean > /dev/null
+print_success "APT 清理完成"
 
 echo
 
 # 卸载总结
 print_success "=========================================="
-print_success "卸载完成！"
+print_success "所有卸载操作已完成！"
 print_success "=========================================="
 echo
 
-print_info "已卸载的组件："
-echo "  ✓ shadowsocks-libev"
-echo "  ✓ shadowsocks-rust"
-echo "  ✓ simple-obfs"
-echo "  ✓ systemd 服务文件"
-echo "  ✓ 配置文件目录"
-echo
-
-# 检查是否还有残留
-print_info "检查残留文件..."
+# 最终检查
+print_info "最终检查残留..."
 RESIDUAL=false
+COMMANDS_TO_CHECK=("ss-server" "ssserver" "obfs-server" "sslocal")
 
-if command -v ss-server >/dev/null 2>&1; then
-    print_warn "发现残留: ss-server 命令仍然存在"
-    RESIDUAL=true
-fi
-
-if command -v ssserver >/dev/null 2>&1; then
-    print_warn "发现残留: ssserver 命令仍然存在"
-    RESIDUAL=true
-fi
-
-if command -v obfs-server >/dev/null 2>&1; then
-    print_warn "发现残留: obfs-server 命令仍然存在"
-    RESIDUAL=true
-fi
+for cmd in "${COMMANDS_TO_CHECK[@]}"; do
+    if command -v $cmd >/dev/null 2>&1; then
+        print_warn "发现残留: 命令 '$cmd' 仍然存在于 $(command -v $cmd)"
+        RESIDUAL=true
+    fi
+done
 
 if [ "$RESIDUAL" = false ]; then
-    print_success "未发现残留文件"
+    print_success "未发现主要残留命令，系统已清理干净。"
 fi
 
 echo
-print_info "如需重新安装，请运行安装脚本"
 print_success "=========================================="
