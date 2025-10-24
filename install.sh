@@ -99,7 +99,7 @@ echo
 # 步骤 4: 安装 simple-obfs
 print_step "步骤 4/7: 安装 simple-obfs"
 
-OBFS_URL="https://github.com/hide3110/ss-lib-rust/raw/main/simple-obfs-debian12-amd64.tar.gz"
+OBFS_URL="https://github.com/hide3110/ss-lib-rust/raw/main/simple-obfs-debian10-amd64.tar.gz"
 
 print_info "下载 simple-obfs..."
 if wget -q --show-progress "$OBFS_URL" -O /tmp/simple-obfs.tar.gz; then
