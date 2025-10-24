@@ -125,8 +125,6 @@ echo
 # 步骤 5: 创建 shadowsocks-rust systemd 服务
 print_step "步骤 5/7: 创建 shadowsocks-rust 服务文件"
 
-mkdir -p /usr/lib/systemd/system
-
 cat > /usr/lib/systemd/system/shadowsocks-rust.service <<'EOF'
 [Unit]
 Description=Shadowsocks-rust Service
