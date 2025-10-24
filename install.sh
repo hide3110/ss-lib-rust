@@ -140,11 +140,6 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
 
 print_success "shadowsocks-rust 服务文件创建完成"
 echo
