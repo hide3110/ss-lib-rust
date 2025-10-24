@@ -41,14 +41,6 @@ echo "  - rust 加密: aes-128-gcm"
 echo "  - 混淆插件: obfs-server (http)"
 echo
 
-read -p "是否继续安装? (y/N): " -r
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_info "已取消安装"
-    exit 0
-fi
-
-echo
-
 # 步骤 1: 更新系统
 print_step "步骤 1/7: 更新系统并安装基础工具"
 apt update && apt upgrade -y
@@ -133,9 +125,9 @@ echo
 # 步骤 5: 创建 shadowsocks-rust systemd 服务
 print_step "步骤 5/7: 创建 shadowsocks-rust 服务文件"
 
-mkdir -p /etc/systemd/system
+mkdir -p /usr/lib/systemd/system
 
-cat > /etc/systemd/system/shadowsocks-rust.service <<'EOF'
+cat > /usr/lib/systemd/system/shadowsocks-rust.service <<'EOF'
 [Unit]
 Description=Shadowsocks-rust Service
 Documentation=https://github.com/shadowsocks/shadowsocks-rust
@@ -144,7 +136,7 @@ After=network.target
 [Service]
 Type=simple
 LimitNOFILE=32768
-ExecStart=/usr/bin/ssservice -c /etc/shadowsocks-rust/config.json
+ExecStart=/usr/bin/ssservice server --log-without-time -c /etc/shadowsocks-rust/config.json
 Restart=on-failure
 
 [Install]
